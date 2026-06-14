@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datacenters in Orbit — A Deep Dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#060713; --void2:#0A0C1C; --panel:#10132A; --panel2:#0C0F22;
+    --line:rgba(150,170,225,.13); --line2:rgba(150,170,225,.24);
+    --ice:#EAF0FF; --haze:#93A0C8; --dim:#5C6892;
+    --cold:#38BDF8;       /* space / solar / cold */
+    --plasma:#A78BFA;     /* cosmic signature */
+    --hot:#FB7185;        /* heat / danger / radiation */
+    --amber:#FBA94C;      /* reentry / caution */
+    --solar:#FBBF24;      /* sun */
+    --grn:#34D399;        /* "we have this" */
+    --display:'Sora',sans-serif; --body:'Inter',sans-serif; --mono:'JetBrains Mono',monospace;
+    --maxw:1080px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--void); color:var(--ice); font-family:var(--body); line-height:1.6; -webkit-font-smoothing:antialiased; overflow-x:hidden}
+  body::before{content:""; position:fixed; inset:0; z-index:-3; pointer-events:none;
+    background:
+      radial-gradient(1200px 800px at 75% -5%, rgba(167,139,250,.16), transparent 60%),
+      radial-gradient(900px 700px at 10% 8%, rgba(56,189,248,.10), transparent 55%),
+      radial-gradient(700px 600px at 90% 95%, rgba(251,113,133,.06), transparent 60%),
+      var(--void);}
+  /* starfield */
+  .stars,.stars2{position:fixed; inset:0; z-index:-2; pointer-events:none}
+  .stars{background-image:
+      radial-gradient(1px 1px at 15% 20%, #fff, transparent),
+      radial-gradient(1px 1px at 70% 15%, rgba(255,255,255,.7), transparent),
+      radial-gradient(1px 1px at 40% 60%, rgba(255,255,255,.6), transparent),
+      radial-gradient(1px 1px at 85% 50%, #fff, transparent),
+      radial-gradient(1px 1px at 55% 80%, rgba(255,255,255,.5), transparent),
+      radial-gradient(1px 1px at 25% 90%, rgba(255,255,255,.6), transparent),
+      radial-gradient(1px 1px at 92% 78%, rgba(255,255,255,.5), transparent),
+      radial-gradient(1px 1px at 8% 55%, rgba(255,255,255,.5), transparent);
+    animation:tw 6s ease-in-out infinite}
+  .stars2{background-image:
+      radial-gradient(1.5px 1.5px at 30% 35%, rgba(167,139,250,.9), transparent),
+      radial-gradient(1.5px 1.5px at 65% 70%, rgba(56,189,248,.8), transparent),
+      radial-gradient(1.5px 1.5px at 80% 25%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 18% 75%, rgba(255,255,255,.7), transparent);
+    animation:tw 8s ease-in-out infinite reverse}
+  @keyframes tw{0%,100%{opacity:.45}50%{opacity:1}}
+
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px}
+  .narrow{max-width:760px; margin:0 auto; padding:0 24px}
+  .mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+  h1,h2,h3,h4{font-family:var(--display); font-weight:700; line-height:1.1; letter-spacing:-.02em}
+  a{color:var(--cold)}
+
+  /* progress + nav */
+  .prog{position:fixed; top:0; left:0; height:3px; width:0; z-index:60;
+    background:linear-gradient(90deg,var(--cold),var(--plasma),var(--hot)); box-shadow:0 0 12px rgba(167,139,250,.6)}
+  .kicker-nav{position:fixed; top:0; right:0; left:0; z-index:50; backdrop-filter:blur(8px);
+    background:linear-gradient(180deg,rgba(6,7,19,.85),transparent); }
+  .kicker-nav .inner{max-width:var(--maxw); margin:0 auto; padding:13px 24px; display:flex; justify-content:space-between; align-items:center}
+  .badge{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--haze)}
+  .badge b{color:var(--plasma)}
+  .nav-x{font-family:var(--mono); font-size:11px; color:var(--dim); display:flex; gap:18px}
+  .nav-x a{color:var(--dim); text-decoration:none}
+  .nav-x a:hover{color:var(--ice)}
+  @media(max-width:720px){.nav-x{display:none}}
+
+  /* HERO */
+  .hero{position:relative; min-height:96vh; display:flex; flex-direction:column; justify-content:center; padding:90px 0 50px; overflow:hidden}
+  .orbit-stage{position:absolute; inset:0; z-index:0; display:flex; align-items:center; justify-content:center; opacity:.92}
+  .orbit-svg{width:min(92vw,920px); height:auto; max-height:80vh}
+  .earth-glow{filter:drop-shadow(0 0 40px rgba(56,189,248,.35))}
+  .sat-orbit{transform-origin:460px 430px; animation:spin 26s linear infinite}
+  .sat-orbit.b{animation-duration:38s; animation-direction:reverse}
+  .sat-orbit.c{animation-duration:46s}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hero-content{position:relative; z-index:2}
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:.24em; text-transform:uppercase; color:var(--cold); margin-bottom:20px}
+  .hero h1{font-size:clamp(40px,7.2vw,86px); font-weight:800; max-width:14ch}
+  .hero h1 .grad{background:linear-gradient(100deg,var(--cold),var(--plasma) 55%,var(--hot)); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .hero .dek{margin-top:24px; max-width:60ch; font-size:clamp(16px,1.7vw,20px); color:var(--haze)}
+  .hero .scroll-hint{margin-top:46px; font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--dim); display:flex; align-items:center; gap:10px}
+  .scroll-hint .ln{width:36px; height:1px; background:var(--dim); position:relative; overflow:hidden}
+  .scroll-hint .ln::after{content:""; position:absolute; inset:0; width:12px; background:var(--cold); animation:slide 2s ease-in-out infinite}
+  @keyframes slide{0%{transform:translateX(-12px)}100%{transform:translateX(36px)}}
+
+  /* generic section */
+  .sec{padding:72px 0; position:relative}
+  .label{font-family:var(--mono); font-size:11.5px; letter-spacing:.18em; text-transform:uppercase; margin-bottom:16px; display:inline-flex; align-items:center; gap:9px}
+  .label .pip{width:7px; height:7px; border-radius:50%}
+  .l-cold{color:var(--cold)} .l-cold .pip{background:var(--cold); box-shadow:0 0 10px var(--cold)}
+  .l-hot{color:var(--hot)} .l-hot .pip{background:var(--hot); box-shadow:0 0 10px var(--hot)}
+  .l-plasma{color:var(--plasma)} .l-plasma .pip{background:var(--plasma); box-shadow:0 0 10px var(--plasma)}
+  .l-amber{color:var(--amber)} .l-amber .pip{background:var(--amber); box-shadow:0 0 10px var(--amber)}
+  .l-solar{color:var(--solar)} .l-solar .pip{background:var(--solar); box-shadow:0 0 10px var(--solar)}
+  .sec h2{font-size:clamp(28px,4.2vw,46px); max-width:18ch; margin-bottom:20px}
+  .lede{font-size:clamp(16px,1.5vw,18.5px); color:var(--haze); max-width:68ch}
+  .body-p{font-size:16.5px; color:#C2CBE8; max-width:68ch; margin-top:18px}
+  .body-p strong{color:var(--ice); font-weight:600}
+  .pull{font-family:var(--display); font-weight:600; font-size:clamp(20px,2.6vw,28px); line-height:1.3; color:var(--ice); max-width:20ch; margin:34px 0; padding-left:22px; border-left:3px solid var(--plasma)}
+
+  .reveal{opacity:0; transform:translateY(24px); transition:opacity .7s ease, transform .7s ease}
+  .reveal.in{opacity:1; transform:none}
+
+  /* stat strip */
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:30px 0}
+  @media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{border:1px solid var(--line); border-radius:15px; padding:18px; background:linear-gradient(180deg,var(--panel),var(--panel2))}
+  .stat .v{font-family:var(--display); font-weight:700; font-size:clamp(24px,3vw,32px); letter-spacing:-.02em}
+  .stat .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin-top:7px}
+  .v-cold{color:var(--cold)} .v-hot{color:var(--hot)} .v-plasma{color:var(--plasma)} .v-amber{color:var(--amber)} .v-solar{color:var(--solar)} .v-grn{color:var(--grn)}
+
+  /* card / panel */
+  .card{border:1px solid var(--line); border-radius:18px; padding:26px; background:linear-gradient(180deg,var(--panel),var(--panel2)); position:relative; overflow:hidden}
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:center}
+  @media(max-width:840px){.two{grid-template-columns:1fr; gap:26px}}
+
+  /* WIDGET shared */
+  .widget{border:1px solid var(--line2); border-radius:20px; padding:28px; background:linear-gradient(180deg,rgba(20,24,52,.7),rgba(10,12,28,.7)); margin-top:8px}
+  .widget .wtitle{font-family:var(--display); font-weight:600; font-size:18px; margin-bottom:4px}
+  .widget .wsub{font-family:var(--mono); font-size:11px; color:var(--dim); letter-spacing:.06em; margin-bottom:22px}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:6px; background:#1b2240; outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--cold); cursor:pointer; box-shadow:0 0 0 5px rgba(56,189,248,.18); transition:background .2s}
+  input[type=range]::-moz-range-thumb{width:20px; height:20px; border:0; border-radius:50%; background:var(--cold); cursor:pointer; box-shadow:0 0 0 5px rgba(56,189,248,.18)}
+  .scl{display:flex; justify-content:space-between; font-family:var(--mono); font-size:10px; color:var(--dim); margin-top:8px}
+
+  /* cooling toggle */
+  .seg{display:inline-flex; border:1px solid var(--line2); border-radius:11px; padding:4px; gap:4px; margin-bottom:22px}
+  .seg button{font-family:var(--mono); font-size:12px; letter-spacing:.05em; text-transform:uppercase; cursor:pointer; background:transparent; color:var(--haze); border:0; border-radius:8px; padding:9px 18px; transition:.18s}
+  .seg button.on{background:var(--cold); color:#04121f; font-weight:700}
+  .seg button.on.hotmode{background:var(--hot); color:#1a0408}
+  .cool-stage{position:relative; height:240px; border-radius:14px; overflow:hidden; border:1px solid var(--line); background:radial-gradient(circle at 50% 120%, rgba(56,189,248,.08), transparent 70%)}
+  .chip{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:90px; height:90px; border-radius:10px;
+    background:linear-gradient(135deg,#2a1518,#4a1d22); border:1px solid rgba(251,113,133,.5); display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 40px rgba(251,113,133,.5); z-index:3}
+  .chip span{font-family:var(--mono); font-size:11px; color:#ffd5db; font-weight:700}
+  .chip::after{content:""; position:absolute; inset:-6px; border-radius:12px; border:1px solid rgba(251,113,133,.3); animation:hotpulse 1.6s ease-in-out infinite}
+  @keyframes hotpulse{0%,100%{opacity:.2; transform:scale(1)}50%{opacity:.7; transform:scale(1.08)}}
+  /* convection particles (earth) */
+  .pcl{position:absolute; width:7px; height:7px; border-radius:50%; bottom:-10px; opacity:0}
+  .cool-stage.earth .pcl{animation:rise linear infinite}
+  @keyframes rise{0%{opacity:0; transform:translateY(0)}10%{opacity:.9}90%{opacity:.9}100%{opacity:0; transform:translateY(-260px)}}
+  /* radiation waves (space) */
+  .wave{position:absolute; left:50%; top:50%; width:90px; height:90px; border-radius:12px; border:1.5px solid var(--hot); transform:translate(-50%,-50%); opacity:0}
+  .cool-stage.space .wave{animation:radiate 3.4s ease-out infinite}
+  @keyframes radiate{0%{opacity:.6; transform:translate(-50%,-50%) scale(1)}100%{opacity:0; transform:translate(-50%,-50%) scale(3.2)}}
+  .cool-caption{font-family:var(--mono); font-size:12px; color:var(--haze); margin-top:16px; min-height:34px}
+  .cool-caption b{color:var(--ice)}
+
+  /* launch cost widget */
+  .breakeven{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:20px 0}
+  @media(max-width:600px){.breakeven{grid-template-columns:1fr}}
+  .becard{border:1px solid var(--line); border-radius:13px; padding:16px; text-align:center}
+  .becard .lab{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim)}
+  .becard .num{font-family:var(--display); font-weight:700; font-size:30px; margin-top:6px}
+  .bars{margin-top:6px}
+  .barrow{display:flex; align-items:center; gap:12px; margin:10px 0}
+  .barrow .nm{font-family:var(--mono); font-size:11px; color:var(--haze); width:84px; flex-shrink:0}
+  .bartrack{flex:1; height:22px; background:#141833; border-radius:6px; overflow:hidden; position:relative}
+  .barfill{height:100%; border-radius:6px; transition:width .25s ease}
+  .bf-orbit{background:linear-gradient(90deg,var(--plasma),var(--hot))}
+  .bf-terr{background:linear-gradient(90deg,#2b3566,var(--cold))}
+  .barrow .amt{font-family:var(--mono); font-size:12px; font-weight:700; width:62px; text-align:right}
+  .verdict-line{font-family:var(--mono); font-size:13px; margin-top:14px; padding:12px 14px; border-radius:10px; border:1px solid var(--line2); text-align:center}
+
+  /* constellation builder */
+  .grid-sats{display:grid; grid-template-columns:repeat(40,1fr); gap:2px; margin:18px 0; min-height:120px; align-content:start}
+  .dot{width:100%; aspect-ratio:1; border-radius:1px; background:#1a2040; transition:background .02s}
+  .dot.on{background:var(--cold)}
+  .build-btn{font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; background:var(--plasma); color:#0a0518; border:0; border-radius:10px; padding:11px 20px; font-weight:700}
+  .build-btn:disabled{opacity:.5; cursor:default}
+  .build-count{font-family:var(--display); font-weight:700; font-size:34px; color:var(--cold)}
+
+  /* status board */
+  .board{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media(max-width:760px){.board{grid-template-columns:1fr}}
+  .bcol h4{font-family:var(--mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase; margin-bottom:14px}
+  .bcol.have h4{color:var(--grn)} .bcol.need h4{color:var(--amber)}
+  .item{display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); font-size:14.5px; color:#C2CBE8}
+  .item:last-child{border-bottom:0}
+  .item .ic{flex-shrink:0; font-family:var(--mono); font-weight:700}
+  .have .ic{color:var(--grn)} .need .ic{color:var(--amber)}
+
+  /* timeline */
+  .tl{position:relative; margin-top:10px; padding-left:26px}
+  .tl::before{content:""; position:absolute; left:6px; top:6px; bottom:6px; width:2px; background:linear-gradient(180deg,var(--cold),var(--plasma),var(--amber))}
+  .tlitem{position:relative; padding:0 0 26px 0}
+  .tlitem::before{content:""; position:absolute; left:-26px; top:4px; width:14px; height:14px; border-radius:50%; background:var(--void); border:2px solid var(--plasma)}
+  .tlitem .yr{font-family:var(--mono); font-weight:700; font-size:13px; color:var(--cold)}
+  .tlitem .ev{font-size:15px; color:#C2CBE8; margin-top:4px; max-width:60ch}
+
+  /* china compare */
+  .vs{display:grid; grid-template-columns:1fr auto 1fr; gap:18px; align-items:center; margin-top:10px}
+  @media(max-width:680px){.vs{grid-template-columns:1fr; gap:14px} .vs .mid{display:none}}
+  .vscard{border:1px solid var(--line); border-radius:16px; padding:22px}
+  .vscard .who{font-family:var(--display); font-weight:700; font-size:17px}
+  .vscard .who small{display:block; font-family:var(--mono); font-weight:400; font-size:11px; color:var(--dim); letter-spacing:.04em; margin-top:3px; text-transform:uppercase}
+  .vscard .big{font-family:var(--display); font-weight:800; font-size:38px; margin:14px 0 2px}
+  .vscard .cap{font-size:13px; color:var(--haze)}
+  .vs .mid{font-family:var(--mono); font-size:13px; color:var(--dim); text-align:center}
+
+  /* source tag */
+  .src{font-family:var(--mono); font-size:10px; letter-spacing:.04em; color:var(--dim); border:1px solid var(--line); border-radius:5px; padding:1px 6px; margin-left:5px; white-space:nowrap; vertical-align:middle}
+  .src.c{color:var(--cold); border-color:rgba(56,189,248,.3)}
+  .src.h{color:var(--hot); border-color:rgba(251,113,133,.3)}
+  .src.p{color:var(--plasma); border-color:rgba(167,139,250,.3)}
+
+  /* verdict */
+  .verdict{border:1px solid var(--line2); border-radius:22px; padding:38px; background:linear-gradient(135deg,rgba(56,189,248,.08),rgba(167,139,250,.07) 50%,rgba(251,113,133,.06))}
+  .verdict h2{font-size:clamp(26px,3.4vw,40px); max-width:22ch; margin-bottom:18px}
+  .verdict p{color:#C9D2EE; font-size:16.5px; max-width:70ch; margin-bottom:14px}
+  .verdict p strong{color:var(--ice)}
+
+  /* footer / sources */
+  .foot{padding:50px 0 80px; border-top:1px solid var(--line); margin-top:50px}
+  .srcs{columns:2; column-gap:34px; font-size:11.5px; color:var(--dim); line-height:1.8; margin-top:14px}
+  @media(max-width:680px){.srcs{columns:1}}
+  .disc{margin-top:24px; font-size:11px; color:var(--dim); line-height:1.65; border:1px solid var(--line); border-radius:12px; padding:16px}
+  .byline{margin-top:24px; font-family:var(--mono); font-size:12px; color:var(--haze); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px}
+  .byline b{color:var(--ice)}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important; transition:none!important; scroll-behavior:auto!important}
+    .reveal{opacity:1; transform:none}
+  }
+</style>
+</head>
+<body>
+<div class="stars"></div>
+<div class="stars2"></div>
+<div class="prog" id="prog"></div>
+
+<nav class="kicker-nav">
+  <div class="inner">
+    <div class="badge">Deep Dive · <b>Datacenters in Orbit</b></div>
+    <div class="nav-x">
+      <a href="#hardware">Hardware</a>
+      <a href="#cooling">Cooling</a>
+      <a href="#data">Workloads</a>
+      <a href="#money">Economics</a>
+      <a href="#politics">Politics</a>
+      <a href="#verdict">Verdict</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="orbit-stage" aria-hidden="true">
+    <svg class="orbit-svg" viewBox="0 0 920 860" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="earth" cx="42%" cy="38%" r="70%">
+          <stop offset="0%" stop-color="#5ec8ff"/><stop offset="45%" stop-color="#2a7fd4"/>
+          <stop offset="100%" stop-color="#0a1f4a"/>
+        </radialGradient>
+        <radialGradient id="atm" cx="50%" cy="50%" r="50%">
+          <stop offset="78%" stop-color="rgba(56,189,248,0)"/>
+          <stop offset="92%" stop-color="rgba(56,189,248,.35)"/>
+          <stop offset="100%" stop-color="rgba(56,189,248,0)"/>
+        </radialGradient>
+      </defs>
+      <!-- orbit rings -->
+      <ellipse cx="460" cy="430" rx="300" ry="300" fill="none" stroke="rgba(167,139,250,.18)" stroke-width="1"/>
+      <ellipse cx="460" cy="430" rx="380" ry="380" fill="none" stroke="rgba(56,189,248,.13)" stroke-width="1"/>
+      <ellipse cx="460" cy="430" rx="225" ry="225" fill="none" stroke="rgba(251,113,133,.12)" stroke-width="1"/>
+      <!-- earth -->
+      <circle cx="460" cy="430" r="150" fill="url(#earth)" class="earth-glow"/>
+      <circle cx="460" cy="430" r="172" fill="url(#atm)"/>
+      <!-- constellation satellites on rings -->
+      <g class="sat-orbit">
+        <g transform="translate(460,130)"><rect x="-13" y="-3" width="26" height="6" rx="2" fill="#cfe3ff"/><rect x="-3" y="-9" width="6" height="18" rx="1" fill="#a78bfa"/></g>
+      </g>
+      <g class="sat-orbit b">
+        <g transform="translate(840,430)"><rect x="-13" y="-3" width="26" height="6" rx="2" fill="#cfe3ff"/><rect x="-3" y="-9" width="6" height="18" rx="1" fill="#38bdf8"/></g>
+      </g>
+      <g class="sat-orbit c">
+        <g transform="translate(235,430)"><rect x="-11" y="-3" width="22" height="6" rx="2" fill="#cfe3ff"/><rect x="-3" y="-8" width="6" height="16" rx="1" fill="#fb7185"/></g>
+      </g>
+      <!-- scattered constellation dots -->
+      <g fill="#a78bfa" opacity=".8">
+        <circle cx="700" cy="210" r="2.5"/><circle cx="250" cy="180" r="2"/><circle cx="760" cy="620" r="2.5"/>
+        <circle cx="180" cy="600" r="2"/><circle cx="620" cy="700" r="2.5"/><circle cx="300" cy="700" r="2"/>
+      </g>
+    </svg>
+  </div>
+  <div class="wrap hero-content">
+    <div class="eyebrow">June 2026 · SpaceX is now public at ~$1.75 trillion</div>
+    <h1>The plan to move the <span class="grad">cloud</span> into orbit</h1>
+    <p class="dek">SpaceX wants to launch up to a million satellites to run AI in space — pitched as unlimited solar power and "free" cooling in the cold of the void. The physics, the money, and the politics are far more interesting than the pitch. Here's the honest deep dive.</p>
+    <div class="scroll-hint">Scroll to begin <span class="ln"></span></div>
+  </div>
+</header>
+
+<!-- INTRO -->
+<section class="sec">
+  <div class="narrow reveal">
+    <p class="body-p" style="font-size:18px">On June 8, three days before its record IPO, SpaceX unveiled <strong>AI1</strong> — its first orbital "datacenter satellite." The promise is seductive: in orbit the Sun never sets, there are no power grids to wait on, and space is freezing cold, so cooling should be easy. <span class="src c">DCD</span> <span class="src c">Tom's Hardware</span></p>
+    <p class="pull">Almost every part of that pitch is either backwards or much harder than it sounds.</p>
+    <p class="body-p">This isn't a takedown — the idea is genuinely clever, and parts of it are already flying. But to understand whether orbital datacenters are a 2030s reality or an IPO talking point, you have to walk through the hardware, the thermodynamics, the unit economics, and the geopolitics together. That's what most coverage skips. Let's go.</p>
+  </div>
+</section>
+
+<!-- 1. HARDWARE: what a space datacenter actually is -->
+<section class="sec" id="hardware">
+  <div class="wrap reveal">
+    <div class="label l-plasma"><span class="pip"></span>The Hardware</div>
+    <h2>A "space datacenter" is really thousands of flying server racks</h2>
+    <p class="lede">There is no single building in orbit. Each AI1 satellite is roughly <strong>one server rack</strong> — about as much compute as a single NVIDIA GB300 rack draws on the ground (~140 kW). To build anything like a real datacenter, you network thousands of them together with lasers. <span class="src p">DCD</span> <span class="src p">Tom's Hardware</span></p>
+
+    <div class="stats">
+      <div class="stat"><div class="v v-plasma">150 kW</div><div class="k">Peak compute / satellite</div></div>
+      <div class="stat"><div class="v v-plasma">70 m</div><div class="k">Solar wingspan — wider than a 747</div></div>
+      <div class="stat"><div class="v v-cold">~600 km</div><div class="k">Orbit altitude (low Earth orbit)</div></div>
+      <div class="stat"><div class="v v-plasma">≈ 1 rack</div><div class="k">Compute ≈ one GB300 rack</div></div>
+    </div>
+
+    <div class="widget reveal" id="builder">
+      <div class="wtitle">Build a 1-gigawatt datacenter, one satellite at a time</div>
+      <div class="wsub">Each satellite ≈ 150 kW. A 1 GW datacenter needs ~6,700 of them — and SpaceX wants to launch that many every year by late 2027.</div>
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap">
+        <span class="build-count" id="bcount">0</span>
+        <span class="mono" style="color:var(--haze); font-size:13px">satellites linked · <span id="bpct">0</span>% of 1 GW</span>
+      </div>
+      <div class="grid-sats" id="grid"></div>
+      <button class="build-btn" id="buildBtn">▶ Launch the constellation</button>
+      <p class="mono" style="font-size:11px; color:var(--dim); margin-top:14px">For scale: Starlink has ~10,500 active satellites today, built up over 7 years. SpaceX has filed to operate up to <strong style="color:var(--haze)">one million</strong> AI satellites. <span class="src">Tom's Hardware</span> <span class="src">MIT Tech Review</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. POWER -->
+<section class="sec">
+  <div class="wrap reveal">
+    <div class="label l-solar"><span class="pip"></span>The Power</div>
+    <div class="two">
+      <div>
+        <h2>The one part that genuinely works better in space</h2>
+        <p class="body-p">Solar is the real advantage. With no atmosphere and no weather, a panel in orbit collects far more energy than the same panel on Earth — and in a special <strong>dawn–dusk sun-synchronous orbit</strong>, the satellite rides the line between day and night and stays in sunlight almost continuously. <span class="src c">Introl</span></p>
+        <p class="body-p">SpaceX plans to make its own aerospace-grade solar cells at an 11-million-square-foot "Gigasat" factory in Bastrop, Texas, targeting 10 gigawatts of solar production a year. <span class="src c">Tom's Hardware</span> <span class="src c">Bloomberg</span></p>
+      </div>
+      <div class="card" style="text-align:center; padding:34px">
+        <svg viewBox="0 0 200 200" width="170" height="170" style="margin:0 auto" aria-hidden="true">
+          <circle cx="100" cy="100" r="34" fill="var(--solar)" style="filter:drop-shadow(0 0 22px rgba(251,191,36,.8))"/>
+          <g stroke="var(--solar)" stroke-width="2.5" stroke-linecap="round">
+            <line x1="100" y1="20" x2="100" y2="42"><animate attributeName="opacity" values="1;.3;1" dur="2s" repeatCount="indefinite"/></line>
+            <line x1="100" y1="158" x2="100" y2="180"><animate attributeName="opacity" values=".3;1;.3" dur="2s" repeatCount="indefinite"/></line>
+            <line x1="20" y1="100" x2="42" y2="100"><animate attributeName="opacity" values="1;.3;1" dur="2.4s" repeatCount="indefinite"/></line>
+            <line x1="158" y1="100" x2="180" y2="100"><animate attributeName="opacity" values=".3;1;.3" dur="2.4s" repeatCount="indefinite"/></line>
+            <line x1="43" y1="43" x2="58" y2="58"><animate attributeName="opacity" values="1;.4;1" dur="1.8s" repeatCount="indefinite"/></line>
+            <line x1="142" y1="142" x2="157" y2="157"><animate attributeName="opacity" values=".4;1;.4" dur="1.8s" repeatCount="indefinite"/></line>
+            <line x1="157" y1="43" x2="142" y2="58"><animate attributeName="opacity" values="1;.4;1" dur="2.2s" repeatCount="indefinite"/></line>
+            <line x1="58" y1="142" x2="43" y2="157"><animate attributeName="opacity" values=".4;1;.4" dur="2.2s" repeatCount="indefinite"/></line>
+          </g>
+        </svg>
+        <div class="mono" style="font-size:13px; color:var(--haze); margin-top:6px">In orbit, a panel can make<br><strong style="color:var(--solar); font-size:20px">5–13×</strong><br>more energy per year than on Earth <span class="src">Introl</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. COOLING (signature) -->
+<section class="sec" id="cooling">
+  <div class="wrap reveal">
+    <div class="label l-hot"><span class="pip"></span>The Physics · The Hard Part</div>
+    <h2>"Space is cold, so cooling is easy" is exactly backwards</h2>
+    <p class="lede">This is the misconception that sinks most casual takes. Space is cold, yes — but a <strong>vacuum is one of the best insulators that exists.</strong> It's literally how a Thermos keeps coffee hot. Put a 150 kW computer in orbit and you've sealed it inside a giant Thermos.</p>
+
+    <p class="body-p">Heat escapes three ways: conduction (touch), convection (a moving fluid carries it off), and radiation (it leaves as infrared light). On Earth, datacenters dump nearly all their heat through <strong>convection and evaporation</strong> — air over heatsinks, water through cold plates, cooling towers. You're physically carrying heat away on a stream of mass. In a vacuum, there's no air and no water, so two of the three doors are bricked shut. <strong>The only exit left is radiation</strong> — and radiation is weak.</p>
+
+    <div class="widget reveal">
+      <div class="wtitle">See it: the same hot chip, on Earth vs in space</div>
+      <div class="wsub">Toggle the environment and watch how the heat gets out.</div>
+      <div class="seg" role="tablist">
+        <button id="btnEarth" class="on">🌍 On Earth</button>
+        <button id="btnSpace" class="hotmode">🛰️ In space</button>
+      </div>
+      <div class="cool-stage earth" id="coolStage">
+        <div class="chip"><span>150 kW</span></div>
+        <div class="wave" style="animation-delay:0s"></div>
+        <div class="wave" style="animation-delay:1.1s"></div>
+        <div class="wave" style="animation-delay:2.2s"></div>
+      </div>
+      <div class="cool-caption" id="coolCap"></div>
+    </div>
+
+    <p class="body-p">And here's the counterintuitive kicker: radiated power scales with the <em>fourth power of the radiator's own temperature</em> — not with how cold space is. Whether the void is −270°C or −100°C barely matters. To shed the ~1,400 watts per square meter that AI1 targets, the radiator has to run <strong>hot, around 125–135°C</strong>, which means pumping heat "uphill" from cool chips to a hot panel. <span class="src h">SpaceX / DCD</span></p>
+
+    <p class="pull">For reference, the Space Station rejects ~70 kW of heat across 422 m² of radiator — at a cost reported up to $500 million. AI1 must reject roughly twice that heat in a quarter of the area. <span class="src h">SemiAnalysis</span></p>
+
+    <p class="body-p">That's why Musk describes AI1 as basically "solar cells, a radiator, and some lasers." <strong>The radiator isn't an accessory — it's most of the spacecraft.</strong> The "free cooling in space" line is the single clearest tell that someone hasn't run the thermodynamics.</p>
+
+    <p class="body-p">And "cold" isn't even steady. With no air to even out temperature, the same satellite is scorching on its sunlit face and frigid in shadow at the same instant — and every orbit it passes through a few minutes of eclipse. <strong>Surfaces swing from roughly +120°C to −250°C,</strong> which fatigues materials and forces extra battery mass to keep the chips alive through the dark side. Space isn't a cold room; it's a violent temperature seesaw. <span class="src h">Arthur D. Little</span></p>
+  </div>
+</section>
+
+<!-- 4. RADIATION -->
+<section class="sec">
+  <div class="wrap reveal">
+    <div class="label l-amber"><span class="pip"></span>The Physics · Radiation</div>
+    <div class="two">
+      <div>
+        <h2>Cosmic rays flip the bits in your chips</h2>
+        <p class="body-p">On the ground, Earth's atmosphere and magnetic field shield electronics from a constant storm of high-energy particles. In orbit, that shield is gone. The result is two distinct problems. <span class="src">MIT Tech Review</span></p>
+        <p class="body-p"><strong>Single-event upsets:</strong> a single charged particle strikes a chip and flips a bit — corrupting data or crashing a process mid-calculation. <strong>Total ionizing dose:</strong> radiation accumulates over time and permanently degrades the hardware. <span class="src">arXiv</span> <span class="src">ScienceDirect</span></p>
+        <p class="body-p">You can build "radiation-hardened" chips, but they run <strong>roughly twice as slow and cost many times more</strong> — a brutal trade-off when the whole point is cutting-edge AI compute. Consumer GPUs aren't rad-hard, so they need shielding (which is mass, which is launch cost) plus constant error-correction overhead. <span class="src">arXiv</span></p>
+      </div>
+      <div class="card" style="padding:30px">
+        <svg viewBox="0 0 260 200" width="100%" aria-hidden="true">
+          <!-- chip -->
+          <rect x="95" y="80" width="70" height="70" rx="6" fill="#141833" stroke="var(--cold)" stroke-width="1.5"/>
+          <g stroke="var(--cold)" stroke-width="1" opacity=".5">
+            <line x1="110" y1="95" x2="150" y2="95"/><line x1="110" y1="108" x2="150" y2="108"/>
+            <line x1="110" y1="121" x2="150" y2="121"/><line x1="110" y1="134" x2="150" y2="134"/>
+          </g>
+          <text x="130" y="170" text-anchor="middle" fill="var(--haze)" font-family="JetBrains Mono" font-size="9">GPU</text>
+          <!-- incoming particles -->
+          <g stroke="var(--amber)" stroke-width="2" stroke-linecap="round">
+            <line x1="20" y1="20" x2="60" y2="55"><animate attributeName="opacity" values="0;1;0" dur="1.6s" repeatCount="indefinite"/></line>
+            <line x1="240" y1="15" x2="195" y2="55"><animate attributeName="opacity" values="0;1;0" dur="1.6s" begin=".5s" repeatCount="indefinite"/></line>
+            <line x1="130" y1="5" x2="130" y2="45"><animate attributeName="opacity" values="0;1;0" dur="1.6s" begin="1s" repeatCount="indefinite"/></line>
+          </g>
+          <!-- impact flash -->
+          <circle cx="130" cy="108" r="5" fill="var(--hot)"><animate attributeName="opacity" values="0;1;0" dur="1.6s" begin="1s" repeatCount="indefinite"/><animate attributeName="r" values="3;9;3" dur="1.6s" begin="1s" repeatCount="indefinite"/></circle>
+          <text x="130" y="113" text-anchor="middle" fill="#fff" font-family="JetBrains Mono" font-size="8" font-weight="700"><animate attributeName="opacity" values="0;1;0" dur="1.6s" begin="1s" repeatCount="indefinite"/>1→0</text>
+        </svg>
+        <div class="mono" style="font-size:11.5px; color:var(--haze); text-align:center; margin-top:8px">A particle strike flips a bit:<br>a "single-event upset"</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. DEPRECIATION + REENTRY -->
+<section class="sec">
+  <div class="wrap reveal">
+    <div class="label l-amber"><span class="pip"></span>The Lifecycle · The Atmosphere</div>
+    <h2>A five-year clock — and what happens when it runs out</h2>
+    <p class="lede">Between radiation damage, orbital decay, and the relentless pace of better chips, satellites in low orbit last only about <strong>five years</strong>. For a financial model, that's a punishing depreciation schedule: a terrestrial datacenter is written off over ~15 years. <span class="src h">AGU</span></p>
+
+    <p class="body-p">It also means a constellation is a permanent <strong>burn-and-replace treadmill</strong>. You're not building a datacenter once; you're rebuilding a fraction of it every year, forever — launching replacements just to stand still. And every retired satellite has to come down.</p>
+
+    <div class="card" style="margin-top:24px; border-color:rgba(251,169,76,.3)">
+      <div class="two">
+        <div>
+          <h4 style="font-size:18px; margin-bottom:12px; color:var(--amber)">The pollution nobody priced in</h4>
+          <p class="body-p" style="margin-top:0">Satellites are <strong>15–40% aluminum</strong>. When they burn up on reentry, that aluminum vaporizes into aluminum oxides — and those oxides catalytically destroy stratospheric ozone for <em>decades</em>, without being consumed in the reaction. <span class="src h">Scientific American</span> <span class="src h">AGU</span></p>
+          <p class="body-p">Astronomers objecting to SpaceX's filing estimate replacing a million satellites could push debris reentry from a few pieces a day to <strong>roughly one every three minutes.</strong> The "clean, no-water, green" framing doesn't survive contact with this. <span class="src h">MIT Tech Review</span></p>
+        </div>
+        <div style="text-align:center">
+          <div class="mono" style="font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim)">Debris reentry rate</div>
+          <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin:18px 0">
+            <div><div class="build-count" style="color:var(--haze); font-size:26px">~3–4</div><div class="mono" style="font-size:10px; color:var(--dim)">per day, today</div></div>
+            <div style="color:var(--amber); font-size:24px">→</div>
+            <div><div class="build-count" style="color:var(--amber); font-size:26px">1 / 3 min</div><div class="mono" style="font-size:10px; color:var(--dim)">at full scale</div></div>
+          </div>
+          <svg viewBox="0 0 200 90" width="100%" aria-hidden="true">
+            <path d="M10 10 Q 60 40 120 80" stroke="var(--amber)" stroke-width="2" fill="none" stroke-dasharray="4 4" opacity=".7"/>
+            <g transform="translate(120,80)"><circle r="4" fill="var(--hot)"><animate attributeName="opacity" values="1;.2;1" dur="1.4s" repeatCount="indefinite"/></circle>
+              <path d="M-2 -8 Q 0 -16 2 -8" stroke="var(--amber)" stroke-width="2" fill="none"><animate attributeName="opacity" values=".3;1;.3" dur="1.4s" repeatCount="indefinite"/></path>
+            </g>
+            <text x="150" y="84" fill="var(--haze)" font-family="JetBrains Mono" font-size="9">burn-up</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <p class="body-p">And reentry is only half of it. The <strong>launches themselves</strong> pollute: kerosene-burning rockets like Falcon 9 inject black carbon — soot — directly into the upper atmosphere, where it lingers for years instead of being rained out, giving it a <strong>~500× greater climate impact per unit mass</strong> than soot from cars or power plants. Megaconstellations are projected to drive <strong>~42% of all space-sector climate pollution by 2029.</strong> UCL researchers call the combined effect "a small-scale, unregulated geoengineering experiment" — and a US federal court has ruled that no environmental law requires anyone to review it. <span class="src h">UCL / Earth's Future</span> <span class="src h">Nature</span></p>
+  </div>
+</section>
+
+<!-- 5.5 THE DATA PROBLEM -->
+<section class="sec" id="data">
+  <div class="wrap reveal">
+    <div class="label l-cold"><span class="pip"></span>The Catch · What Can Actually Run Up There</div>
+    <h2>Even if the hardware works, only certain jobs belong in orbit</h2>
+    <p class="lede">Here's the constraint almost everyone skips. A signal to orbit and back takes only a few milliseconds — latency isn't the real problem. <strong>Moving the data is.</strong> Training an AI model means shuttling petabytes up and results back down through a laser-and-radio link that has a hard ceiling — and the data from a satellite can already exceed what its link can downlink in a single pass. <span class="src c">arXiv</span></p>
+
+    <p class="body-p">That splits the world of computing in two. <strong>Latency-tolerant batch work</strong> — model training, simulation, analytics — can run in orbit, because it values cheap continuous power over instant response. <strong>Real-time, user-facing work</strong> — chatbots, search, transactions — stays on the ground, close to the people using it. You're not moving "the cloud" to space; you're moving one slice of it. <span class="src c">JLL</span> <span class="src c">Arthur D. Little</span></p>
+
+    <div class="card" style="margin-top:22px">
+      <div class="wsub" style="margin-bottom:18px">Which workloads actually fit orbit</div>
+      <div class="item" style="border-color:rgba(52,211,153,.2)"><span class="ic" style="color:var(--grn)">✓✓</span><span><strong>Data born in space</strong> — Earth-observation imagery, satellite RF. Process it in orbit, beam down only the answer. The ideal customer is <em>already up there.</em></span></div>
+      <div class="item" style="border-color:rgba(56,189,248,.2)"><span class="ic" style="color:var(--cold)">✓</span><span><strong>Batch AI training &amp; simulation</strong> — energy-hungry, latency-tolerant. The headline use case — but it still needs all that ground data hauled up.</span></div>
+      <div class="item"><span class="ic" style="color:var(--hot)">✕</span><span><strong>Real-time inference &amp; anything user-facing</strong> — stays terrestrial, next to the users and their data.</span></div>
+    </div>
+
+    <p class="pull">"Putting servers in orbit is a stupid idea — unless your customers are also in orbit." <span class="src" style="border:0; color:var(--haze)">— quoted in Live Science</span></p>
+
+    <p class="body-p">That's the quiet tell in the whole concept: the cleanest business case isn't replacing ground datacenters at all — it's serving customers and data that already live in space. Everything else has to justify dragging Earth's data up a very expensive hill. There's also a hidden bill here: a global network of <strong>ground stations and optical downlink dishes</strong> to talk to the constellation — major infrastructure that never shows up in the per-satellite cost. <span class="src c">Arthur D. Little</span></p>
+  </div>
+</section>
+
+<!-- 6. ECONOMICS (signature widget) -->
+<section class="sec" id="money">
+  <div class="wrap reveal">
+    <div class="label l-cold"><span class="pip"></span>The Economics</div>
+    <h2>The whole thesis rests on one number: the cost to reach orbit</h2>
+    <p class="lede">Independent models agree orbital compute is far costlier than ground today. One widely-cited estimate puts a 1 GW orbital datacenter at <strong>~$42 billion — about 3× its terrestrial equivalent.</strong> SemiAnalysis is harsher still: ~8× the capex and ~17× the monthly cost of ownership, largely because orbital hardware dies in 5 years versus 15 on the ground. <span class="src c">TechCrunch</span> <span class="src c">SemiAnalysis</span></p>
+
+    <p class="body-p">But almost all of that gap is <strong>launch cost</strong>. Falcon 9 runs ~$3,600/kg today; the business case needs roughly <strong>$200/kg</strong> — an 18× reduction — which only Starship could deliver, and not before the 2030s. Drag the slider to see how the economics flip. <span class="src c">Google Suncatcher</span></p>
+
+    <div class="widget reveal">
+      <div class="wtitle">Launch-cost break-even calculator</div>
+      <div class="wsub">Cost to build a 1-gigawatt datacenter · orbital vs terrestrial</div>
+
+      <div style="margin:6px 0 4px; display:flex; justify-content:space-between; align-items:baseline">
+        <span class="mono" style="font-size:13px; color:var(--haze)">Launch cost to orbit</span>
+        <span class="mono" style="font-size:20px; font-weight:700; color:var(--cold)" id="lcVal">$3,600 / kg</span>
+      </div>
+      <input type="range" id="launch" min="50" max="3600" step="25" value="3600" aria-label="Launch cost per kilogram">
+      <div class="scl"><span>$50/kg (dream)</span><span>$200 (Starship target)</span><span>$3,600 (Falcon 9 today)</span></div>
+
+      <div class="breakeven">
+        <div class="becard"><div class="lab">Orbital 1 GW datacenter</div><div class="num" style="color:var(--plasma)" id="orbCost">$42.4B</div></div>
+        <div class="becard"><div class="lab">Terrestrial 1 GW datacenter</div><div class="num" style="color:var(--cold)">$14.0B</div></div>
+      </div>
+
+      <div class="bars">
+        <div class="barrow"><span class="nm">Orbital</span><div class="bartrack"><div class="barfill bf-orbit" id="barOrb" style="width:100%"></div></div><span class="amt" style="color:var(--plasma)" id="amtOrb">$42.4B</span></div>
+        <div class="barrow"><span class="nm">Terrestrial</span><div class="bartrack"><div class="barfill bf-terr" style="width:33%"></div></div><span class="amt" style="color:var(--cold)">$14.0B</span></div>
+      </div>
+
+      <div class="verdict-line" id="beVerdict">At today's launch cost, orbit costs <b style="color:var(--hot)">3.0× more</b> than building on the ground.</div>
+      <p class="mono" style="font-size:10.5px; color:var(--dim); margin-top:14px">Illustrative model calibrated to McCalip's ~$42.4B/GW at Falcon-9 pricing and break-even near Google's $200/kg target. Real estimates range from 3× to 17× depending on assumptions. <span class="src">TechCrunch</span> <span class="src">SemiAnalysis</span></p>
+    </div>
+
+    <p class="body-p">So why would anyone do it before then? One reason: <strong>terrestrial power is running out faster than orbit's cost is falling.</strong> A megawatt of AI compute earns roughly $70M/year at cloud rates, and on the ground you might wait 5+ years in a grid-connection queue. If you can deploy in orbit in 12–18 months, that early-access premium can justify a higher cost — for customers who literally cannot get power any other way. <span class="src c">Luminix</span></p>
+    <p class="pull">The bet isn't that space is cheap. It's that Earth is full.</p>
+  </div>
+</section>
+
+<!-- 7. POLITICS / CHINA -->
+<section class="sec" id="politics">
+  <div class="wrap reveal">
+    <div class="label l-plasma"><span class="pip"></span>The Politics</div>
+    <h2>Orbit is a contested commons — and a great-power race</h2>
+    <p class="lede">Low Earth orbit isn't infinite, and it isn't unclaimed. Two forces collide here: a physical sustainability limit, and a US–China scramble for orbital territory and spectrum.</p>
+
+    <div class="vs">
+      <div class="vscard" style="border-color:rgba(56,189,248,.3)">
+        <div class="who">SpaceX (US)<small>Filed with the FCC</small></div>
+        <div class="big" style="color:var(--cold)">1,000,000</div>
+        <div class="cap">satellites filed for — against the <strong>~10,000–15,000 active satellites</strong> in all of orbit today. Roughly 70× over. <span class="src c">MNRAS</span></div>
+      </div>
+      <div class="mid">vs</div>
+      <div class="vscard" style="border-color:rgba(251,113,133,.3)">
+        <div class="who">China (state-backed)<small>Guowang · Qianfan · Honghu-3</small></div>
+        <div class="big" style="color:var(--hot)">~40,000</div>
+        <div class="cap">satellites planned across three megaconstellations; <strong>350+ already launched.</strong> <span class="src h">SpaceNews</span> <span class="src h">KeepTrack</span></div>
+      </div>
+    </div>
+
+    <p class="body-p" style="margin-top:26px">China's Guowang is run by a state-owned enterprise under direct government control, and state sources say it carries not just broadband but laser comms, synthetic-aperture radar, and optical remote sensing — <strong>a dual-use payload mix broadband alone doesn't need.</strong> By the end of March 2026, China had out-launched the United States 34 to 29. The constellation has become strategic infrastructure. <span class="src">Global Recon</span> <span class="src">Ars Technica</span></p>
+
+    <p class="body-p">Two unresolved questions follow from that. Orbital compute is inherently <strong>dual-use</strong> — the same satellite that trains a model can serve a military — which makes it simultaneously a strategic asset and a target in any conflict. And no one has settled <strong>whose laws govern data processed in orbit:</strong> a sovereignty gray zone that export controls and privacy regimes were never written for.</p>
+
+    <p class="body-p">Then there's the physics of the commons. <strong>A single collision in the 500–600 km shell can trigger a chain reaction</strong> — the Kessler syndrome — scattering debris that strikes more satellites in a cascade with no practical cleanup. The dawn–dusk orbit that makes the solar math work is itself a finite, shared lane. Whoever files and launches first is staking orbital real estate. <span class="src">MNRAS</span></p>
+
+    <p class="body-p">And astronomers are mobilizing. Reflective solar panels streak across telescope images and the radio chatter from huge constellations drowns out faint signals from the cosmos — the International Astronomical Union has formally warned that megaconstellations threaten both optical and radio astronomy. Between that, the regulators (FCC, ITU), and the atmospheric scientists, the orbital-datacenter buildout faces a wall of organized opposition that has nothing to do with engineering. <span class="src">IAU</span></p>
+  </div>
+</section>
+
+<!-- 8. HAVE vs NEED -->
+<section class="sec">
+  <div class="wrap reveal">
+    <div class="label l-grn"><span class="pip"></span>Reality Check</div>
+    <h2>What we already have vs what still has to be invented</h2>
+    <p class="lede">The honest scorecard. A lot of the foundation exists — but the hardest pieces are still unproven at anything like the required scale.</p>
+    <div class="card" style="margin-top:24px">
+      <div class="board">
+        <div class="bcol have">
+          <h4>✓ Proven or in hand</h4>
+          <div class="item"><span class="ic">✓</span><span>Reusable launch (Falcon 9) and laser inter-satellite mesh — Starlink already runs ~10,500 satellites.</span></div>
+          <div class="item"><span class="ic">✓</span><span>Solar power in orbit and the sun-synchronous orbit trick for near-continuous sunlight.</span></div>
+          <div class="item"><span class="ic">✓</span><span>GPU-in-orbit demos (Starcloud flew an H100; AI1 prototypes due early 2027).</span></div>
+          <div class="item"><span class="ic">✓</span><span>The customer demand — AI compute scarcity on Earth is real and growing.</span></div>
+        </div>
+        <div class="bcol need">
+          <h4>◷ Still unsolved at scale</h4>
+          <div class="item"><span class="ic">◷</span><span>Rejecting hundreds of kilowatts of heat per satellite with lightweight radiators (AI1's claims are ~8× flight-proven hardware).</span></div>
+          <div class="item"><span class="ic">◷</span><span>$200/kg launch — an 18× cost cut that needs Starship flying routinely.</span></div>
+          <div class="item"><span class="ic">◷</span><span>Running non-rad-hardened AI chips reliably through years of cosmic radiation.</span></div>
+          <div class="item"><span class="ic">◷</span><span>On-orbit servicing / upgrades so hardware doesn't fall behind Earth's chip cycle.</span></div>
+          <div class="item"><span class="ic">◷</span><span>Moving training-scale data up and down through a finite laser/radio link — downlink bandwidth at constellation scale.</span></div>
+          <div class="item"><span class="ic">◷</span><span>Manufacturing 6,000+ complex satellites a year — and the chips, via the unbuilt Terafab.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 9. IMPLICATIONS + TIMELINE -->
+<section class="sec">
+  <div class="wrap reveal">
+    <div class="label l-cold"><span class="pip"></span>What It Means For SpaceX</div>
+    <h2>A leveraged bet on its own cost curve</h2>
+    <p class="body-p">Here's the strategic elegance: SpaceX is the company driving launch costs down <em>and</em> the company that benefits most when they fall. It already rents terrestrial AI compute to Anthropic and Google, so it has a revenue line to extend into orbit if the economics ever close. <span class="src c">TechTimes</span></p>
+    <p class="body-p">But there's a reflexive trap. If SpaceX succeeds in driving launch to $200/kg, that's a public good — <strong>it enables every competitor's space datacenter too</strong>, eroding the very moat that makes the bet special. And the capital required, on top of Starship, Starlink, and the $55B+ Terafab chip fab, makes this one of the most capital-hungry strategies ever attempted. <span class="src c">Tom's Hardware</span></p>
+
+    <div class="tl">
+      <div class="tlitem"><div class="yr">JUN 2026</div><div class="ev">SpaceX IPOs at ~$1.75T; unveils AI1 design three days prior.</div></div>
+      <div class="tlitem"><div class="yr">EARLY 2027</div><div class="ev">Two prototype AI1 satellites launch — the first real test of the power-and-cooling economics at 150 kW.</div></div>
+      <div class="tlitem"><div class="yr">LATE 2027</div><div class="ev">Gigasat factory targets "reasonable volume" — and a 1 GW/year compute goal (~6,700 satellites/yr).</div></div>
+      <div class="tlitem"><div class="yr">2028</div><div class="ev">Earliest orbital deployment per the IPO filing; Terafab chips targeted for mass production.</div></div>
+      <div class="tlitem"><div class="yr">~2030s</div><div class="ev">The earliest point most independent models see launch costs low enough for orbital compute to rival the ground.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- VERDICT -->
+<section class="sec" id="verdict">
+  <div class="wrap reveal">
+    <div class="verdict">
+      <div class="label l-plasma"><span class="pip"></span>The Takeaway</div>
+      <h2>The physics works. The economics don't — yet. And that's the whole story.</h2>
+      <p>Nothing here violates a law of nature. Solar in orbit is real, radiative cooling is real, laser mesh networking is real. The problem is that orbital compute is <strong>3× to 17× more expensive</strong> than the ground today, hostage to a launch-cost curve that won't bend until the 2030s, while carrying real costs the marketing ignores: radiation, a five-year replacement treadmill, and an ozone-depleting reentry problem.</p>
+      <p>So the right way to read AI1 isn't "the cloud is moving to space." It's a <strong>long-dated option on Starship</strong> — a bet that Earth runs out of power and cooling faster than orbit runs out of excuses. The first honest data point arrives in early 2027, when two prototypes either demonstrate the thermodynamics at 150 kW or don't.</p>
+      <p style="color:var(--haze); font-size:15px">The conversation worth having isn't whether it's brilliant or absurd. It's both — and the line between them is a number measured in dollars per kilogram.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER / SOURCES -->
+<footer class="foot">
+  <div class="wrap">
+    <div class="label l-cold" style="margin-bottom:8px"><span class="pip"></span>Sources</div>
+    <div class="srcs">
+      <p>SpaceX AI1 specs &amp; Gigasat: DatacenterDynamics, Tom's Hardware, BGR, TechTimes, TradingKey — reporting on SpaceX's June 8, 2026 presentation and FCC filing. Cost models: Andrew McCalip's orbital calculator (via TechCrunch), SemiAnalysis "To Boldly Go" datacenter TCO model, IEEE Spectrum / ABI Research, SpaceNews. Cooling, thermal cycling &amp; ISS benchmark: SemiAnalysis, Arthur D. Little. Solar &amp; orbit: Introl, Arthur D. Little. Workloads, latency &amp; downlink: JLL, Arthur D. Little, Live Science, and arXiv workload-suitability research. Radiation: MIT Technology Review, plus arXiv and ScienceDirect on single-event upsets &amp; total ionizing dose. Atmosphere — reentry &amp; launch emissions: Scientific American, AGU, Harvard Salata Institute, and the UCL-led study in Earth's Future / Nature on black-carbon "geoengineering." China: SpaceNews, KeepTrack, Orbital Radar, Global Recon, Ars Technica. Commons, Kessler &amp; astronomy: Monthly Notices of the Royal Astronomical Society, International Astronomical Union. Launch-cost target: Google Project Suncatcher feasibility study. Unit-economics framing: Luminix industry analysis. IPO terms: Reuters.</p>
+    </div>
+    <div class="disc">Educational deep-dive built from public reporting. Figures are approximate and drawn from secondary sources; the interactive calculators are illustrative simplifications, not forecasts or investment advice. Independent estimates vary widely, and forward-looking claims about SpaceX, Starship, and orbital economics are inherently uncertain.</div>
+    <div class="byline">
+      <span>Created by <b>Sashank Kocherlakota</b> · A deep dive on orbital datacenters</span>
+      <span>June 2026</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  // progress bar
+  var prog=document.getElementById('prog');
+  function onScroll(){
+    var h=document.documentElement.scrollHeight-window.innerHeight;
+    prog.style.width=(window.scrollY/h*100)+'%';
+  }
+  window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+
+  // reveal on scroll
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(function(el){io.observe(el)});
+
+  // ---- cooling toggle ----
+  var stage=document.getElementById('coolStage'), cap=document.getElementById('coolCap');
+  var be=document.getElementById('btnEarth'), bs=document.getElementById('btnSpace');
+  var EARTH='<b>Convection + evaporation.</b> Air and water physically carry the heat away into a near-infinite sink. Fast, cheap, effective — this is what every datacenter on Earth relies on.';
+  var SPACE='<b>Radiation only.</b> No air, no water — the heat must be converted to infrared light and slowly emitted. Far weaker per square meter, so the radiator must be huge and run hot (~130°C).';
+  function setEarth(){ stage.className='cool-stage earth'; be.classList.add('on'); bs.classList.remove('on'); cap.innerHTML=EARTH; ensureParticles(); }
+  function setSpace(){ stage.className='cool-stage space'; bs.classList.add('on'); be.classList.remove('on'); cap.innerHTML=SPACE; }
+  // create convection particles once
+  var made=false;
+  function ensureParticles(){
+    if(made) return; made=true;
+    var colors=['var(--cold)','#7dd3fc','var(--ice)'];
+    for(var i=0;i<14;i++){
+      var p=document.createElement('div'); p.className='pcl';
+      p.style.left=(15+Math.random()*70)+'%';
+      p.style.background=colors[i%3];
+      p.style.animationDuration=(2.2+Math.random()*1.6)+'s';
+      p.style.animationDelay=(Math.random()*2.5)+'s';
+      stage.appendChild(p);
+    }
+  }
+  be.addEventListener('click',setEarth); bs.addEventListener('click',setSpace);
+  setEarth();
+
+  // ---- launch cost break-even ----
+  var launch=document.getElementById('launch'), lcVal=document.getElementById('lcVal');
+  var orbCost=document.getElementById('orbCost'), amtOrb=document.getElementById('amtOrb'), barOrb=document.getElementById('barOrb');
+  var beV=document.getElementById('beVerdict');
+  var TERR=14.0; // $B per GW terrestrial
+  function orbital(L){ return 12.33 + 0.008353*L; } // calibrated: $42.4B@3600, $14B@200
+  function fmtB(v){ return '$'+v.toFixed(1)+'B'; }
+  function calcLaunch(){
+    var L=+launch.value;
+    lcVal.textContent='$'+L.toLocaleString()+' / kg';
+    var o=orbital(L);
+    orbCost.textContent=fmtB(o); amtOrb.textContent=fmtB(o);
+    // bar width: terrestrial fixed at 33%, scale orbital relative to terrestrial (cap at 100%)
+    var maxRef=42.4; var w=Math.min(100, o/maxRef*100);
+    barOrb.style.width=w+'%';
+    var ratio=o/TERR;
+    if(ratio>1.05){ beV.innerHTML='Orbit costs <b style="color:var(--hot)">'+ratio.toFixed(1)+'× more</b> than building on the ground.'; }
+    else if(ratio>=0.95){ beV.innerHTML='<b style="color:var(--solar)">Break-even.</b> Orbit and ground cost about the same here.'; }
+    else { beV.innerHTML='Orbit is now <b style="color:var(--grn)">'+(1/ratio).toFixed(1)+'× cheaper</b> than the ground — the thesis works.'; }
+  }
+  launch.addEventListener('input',calcLaunch); calcLaunch();
+
+  // ---- constellation builder ----
+  var grid=document.getElementById('grid'), bcount=document.getElementById('bcount'), bpct=document.getElementById('bpct'), buildBtn=document.getElementById('buildBtn');
+  var COLS=40, ROWS=10, TOTAL=COLS*ROWS; // 400 dots represent ~6,700 sats
+  var SATS=6700;
+  for(var i=0;i<TOTAL;i++){ var d=document.createElement('div'); d.className='dot'; grid.appendChild(d); }
+  var dots=grid.children, building=false;
+  function buildAnim(){
+    if(building) return; building=true; buildBtn.disabled=true;
+    var lit=0;
+    var timer=setInterval(function(){
+      lit+=6;
+      for(var k=0;k<lit && k<TOTAL;k++){ dots[k].classList.add('on'); }
+      var sats=Math.min(SATS, Math.round(lit/TOTAL*SATS));
+      bcount.textContent=sats.toLocaleString();
+      bpct.textContent=Math.min(100,Math.round(lit/TOTAL*100));
+      if(lit>=TOTAL){ clearInterval(timer); bcount.textContent=SATS.toLocaleString(); bpct.textContent='100'; buildBtn.textContent='✓ 1 GW datacenter assembled'; building=false; }
+    },45);
+  }
+  buildBtn.addEventListener('click',buildAnim);
+})();
+</script>
+</body>
+</html>
